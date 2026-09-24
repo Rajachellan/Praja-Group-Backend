@@ -39,4 +39,29 @@ async function addContactUsers(req,res) {
     }
 }
 
-module.exports={addContactUsers}
+async function getDatas(req,res) {
+    try{
+        const data=await contactModel.find()
+
+        if(!data){
+            return res.status(401).json({
+                success:false,
+                message:"Data Not Found"
+            })
+        }
+
+        res.status(200).json({
+            success:true,
+            message:"Data Fetched Successfully",
+            data:data
+        })
+    }
+    catch(err){
+        res.status(500).json({
+            success:false,
+            message:`ErrorName:${err.name} ErrorMessage:${err.message}`
+        })
+    }
+}
+
+module.exports={addContactUsers,getDatas}
