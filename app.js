@@ -35,6 +35,16 @@ app.use('/api', blogRoutes);
 const uploadRoutes = require('./routes/uploadRoutes');
 app.use('/api/upload', uploadRoutes);
 
+
+// Career Routes
+const careerRoute=require('./routes/careerRoute')
+app.use('/api',careerRoute)
+
+// Job Enquiry Routes
+const enquiryRoutes=require('./routes/jobRoute')
+app.use('/api',enquiryRoutes)
+
+
 app.listen(port, () => {
     console.log(`Server Running Successfully On ${port}`);
 });
