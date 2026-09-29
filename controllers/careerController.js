@@ -1,17 +1,17 @@
 const model=require('../models/careerModel')
 
 async function addCareer(req,res) {
-    const {jobName,jobRole,experience,responsibilities,qualifications,location}=req.body
+    const {jobName,experience,responsibilities,qualifications,location}=req.body
     try{
 
-        if(!jobName || !jobRole || !experience ||!responsibilities || !qualifications || !location){
+        if(!jobName || !experience ||!responsibilities || !qualifications || !location){
             return res.status(401).json({
                 success:false,
                 message:"All Fields Are Required"
             })
         }
 
-        const newJob=new model({jobName,jobRole,experience,responsibilities,qualifications,location})
+        const newJob=new model({jobName,experience,responsibilities,qualifications,location})
         await newJob.save()
         res.status(201).json({
             success:true,

@@ -32,8 +32,19 @@ const schema = new mongoose.Schema({
     },
     file: {
         type: String
-    }
-}, {
+    },
+    landArea:{
+        type:String,
+    },
+    landOwner:{
+        type:String,
+        enum:["Land Lors","Agent"]
+    },
+    propertyType:{
+        type:String,
+        enum:["Vacant Land","Land With Old Building"]
+    },
+    }, {
     timestamps: true
 });
 
@@ -44,4 +55,4 @@ model.collection.dropIndex("email_1").catch(() => {});
 
 module.exports = model;
 
-
+

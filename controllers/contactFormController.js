@@ -1,7 +1,7 @@
 const contactModel = require('../models/contactFormModel');
 
 async function addContactUsers(req, res) {
-    const { name, email, message, phNo, directorRole, file, propertyLocation } = req.body;
+    const { name, email, message, phNo, directorRole, file, propertyLocation,landArea,landOwner,propertyType } = req.body;
     try {
         if (!name || !email || !message || !phNo) {
             return res.status(400).json({
@@ -17,7 +17,7 @@ async function addContactUsers(req, res) {
             phNo,
             directorRole,
             file,
-            propertyLocation: propertyLocation || "N/A"
+            propertyLocation: propertyLocation || "N/A",landArea,landOwner,propertyType
         });
         await newLead.save();
         res.status(200).json({
