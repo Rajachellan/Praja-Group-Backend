@@ -10,7 +10,7 @@ WORKDIR /app
 
 # Set production environment
 ENV NODE_ENV=production
-ENV PORT=8000
+ENV PORT=4005
 
 # Install dependencies (utilizing layer caching)
 COPY package*.json ./
@@ -23,11 +23,11 @@ COPY . .
 RUN mkdir -p uploads
 
 # Expose backend port (Coolify routes to this port)
-EXPOSE 8000
+EXPOSE 4005
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8000/api || exit 1
+  CMD curl -f http://localhost:4005/api/health || exit 1
 
 # Start server directly with node
 CMD ["node", "app.js"]
