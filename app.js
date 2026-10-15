@@ -18,7 +18,6 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
-app.options('*', cors());
 
 // Serve static uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -26,13 +25,16 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const port = process.env.PORT || 4005;
 
 // Health Check Endpoints
-app.get(['/', '/health', '/api/health'], (req, res) => {
+const healthHandler = (req, res) => {
     res.status(200).json({
         status: 'ok',
         uptime: process.uptime(),
         timestamp: new Date().toISOString()
     });
-});
+};
+app.get('/', healthHandler);
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // Db Connect
 const dbConnect = require('./config/db');
