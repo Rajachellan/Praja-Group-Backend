@@ -24,11 +24,17 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const port = process.env.PORT || 4005;
 
+const mongoose = require('mongoose');
+
 // Health Check Endpoints
 const healthHandler = (req, res) => {
+    const dbState = mongoose.connection.readyState;
+    const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';
     res.status(200).json({
         status: 'ok',
-        uptime: process.uptime(),
+        database: dbStatus,
+        activePort: port,
+        uptime: Math.round(process.uptime()),
         timestamp: new Date().toISOString()
     });
 };
@@ -67,5 +73,20 @@ app.use('/api',enquiryRoutes)
 
 
 app.listen(port, () => {
-    console.log(`Server Running Successfully On ${port}`);
+    console.log(`Server Running Successfully On primary port ${port}`);
 });
+
+// Also bind to port 8000 as fallback so Coolify traffic succeeds whether routed to 4005 or 8000
+const fallbackPort = 8000;
+if (Number(port) !== fallbackPort) {
+    try {
+        const fallbackServer = app.listen(fallbackPort, () => {
+            console.log(`Server also listening on fallback port ${fallbackPort}`);
+        });
+        fallbackServer.on('error', (err) => {
+            console.log(`Fallback port ${fallbackPort} note: ${err.message}`);
+        });
+    } catch (e) {
+        console.log(`Fallback server notice: ${e.message}`);
+    }
+}

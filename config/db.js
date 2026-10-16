@@ -2,20 +2,19 @@ require('dotenv').config()
 
 const mongoose=require('mongoose')
 
-const MONGO_URI=process.env.MONGO_URI
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://Rankraze:XBjy4jmAp82XHTxV@cluster0.lpeh1im.mongodb.net/praja-group?retryWrites=true&w=majority';
 
 async function dbConnect() {
     try{
         if(!MONGO_URI){
-            throw new Error(`${MONGO_URI} Is Missing`);
-            
+            console.error("MONGO_URI Is Missing");
+            return;
         }
-        await mongoose.connect(MONGO_URI)
+        await mongoose.connect(MONGO_URI);
         console.log("Database Connected Successfully");
     }
     catch(err){
-        console.error("Database Connection Failed:",err.message)
-        throw err
+        console.error("Database Connection Failed:", err.message);
     }
 }
 

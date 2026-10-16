@@ -22,8 +22,8 @@ COPY . .
 # Ensure uploads directory exists
 RUN mkdir -p uploads
 
-# Expose backend port (Coolify routes to this port)
-EXPOSE 4005
+# Expose backend ports (4005 and 8000 for complete Coolify compatibility)
+EXPOSE 4005 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
