@@ -63,6 +63,27 @@ router.post('/document', upload.single('file'), async (req, res) => {
   }
 });
 
+// Resume / CV Upload Endpoint (uploads to Cloudflare R2 folder "resumes")
+router.post('/resume', (req, res, next) => {
+  upload.any()(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const file = req.file || (req.files && req.files[0]);
+    if (!file) {
+      return res.status(400).json({ success: false, message: 'Please attach a resume file (PDF/DOC/DOCX)' });
+    }
+    const result = await processFileUpload(file, req, 'resumes');
+    return res.status(200).json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Resume upload failed' });
+  }
+});
+
 // Generic file upload endpoint
 router.post('/file', upload.single('file'), async (req, res) => {
   try {

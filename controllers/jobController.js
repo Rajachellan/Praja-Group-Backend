@@ -19,21 +19,37 @@ async function getJobEnquiries(req, res) {
 }
 
 async function addJobEnquiry(req,res) {
-    const {name,email,phNo,about,CareerId}=req.body
+    let {name,email,phNo,about,CareerId,resume}=req.body
     try{
         if(!name || !email || !phNo || !about || !CareerId){
-            return res.status(401).json({
+            return res.status(400).json({
                 success:false,
                 message:"All Fields Are Required"
             })
         }
 
-        const enquiry=new model({name,email,phNo,about,CareerId})
+        // Support direct multipart file upload if attached
+        const uploadedFile = req.file || (req.files && req.files[0]);
+        if (uploadedFile) {
+            const { processFileUpload } = require('../services/uploadService');
+            const uploadResult = await processFileUpload(uploadedFile, req, 'resumes');
+            resume = uploadResult.url;
+        }
+
+        const enquiry=new model({
+            name,
+            email,
+            phNo,
+            about,
+            CareerId,
+            resume: resume || ''
+        })
 
         await enquiry.save()
         res.status(201).json({
             success:true,
-            message:"Applied Successfully, Our Team Will Connect You Shortly"
+            message:"Applied Successfully, Our Team Will Connect You Shortly",
+            enquiry
         })
     }
     catch(err){

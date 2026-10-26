@@ -20,6 +20,10 @@ const schema=new mongoose.Schema({
         type:String,
         required:true
     },
+    resume:{
+        type:String,
+        default:""
+    },
     CareerId:{
         type:mongoose.Schema.Types.ObjectId,
         ref:"Careers",
