@@ -113,33 +113,7 @@ async function createBlog(req, res) {
   }
 }
 
-// Get All Blogs (With search, filtering, and pagination)
-async function getBlogs(req, res) {
-  try {
-    const { search, category, status } = req.query;
-    const filter = {};
-
-    if (status && status !== 'all') {
-      if (status === 'publish') {
-        filter.$or = [{ status: 'publish' }, { status: 'published' }];
-      } else {
-        filter.status = status;
-      }
-    }
-
-    if (category && category !== 'all') {
-      filter.category = new RegExp(`^${category}$`, 'i');
-    }
-
-    if (search) {
-      filter.$or = [
-        { title: new RegExp(search, 'i') },
-        { category: new RegExp(search, 'i') },
-        { tags: new RegExp(search, 'i') },
-        { metaTitle: new RegExp(search, 'i') }
-      ];
-    }
-
+// Helper to normalize blog image and metadata response
 function formatBlogResponse(b) {
   if (!b) return null;
   const obj = b.toObject ? b.toObject() : { ...b };
@@ -160,6 +134,7 @@ function formatBlogResponse(b) {
 
 // Get All Blogs (With search, filtering, and pagination)
 async function getBlogs(req, res) {
+
   try {
     const { search, category, status } = req.query;
     const filter = {};
