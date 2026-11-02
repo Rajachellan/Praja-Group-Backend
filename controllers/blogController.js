@@ -140,6 +140,51 @@ async function getBlogs(req, res) {
       ];
     }
 
+function formatBlogResponse(b) {
+  if (!b) return null;
+  const obj = b.toObject ? b.toObject() : { ...b };
+  const imgUrl = obj.images || obj.coverImage?.url || obj.featuredImage?.url || obj.mainImage?.url || (typeof obj.coverImage === 'string' ? obj.coverImage : '') || (typeof obj.featuredImage === 'string' ? obj.featuredImage : '') || '';
+  obj.images = imgUrl;
+  obj.coverImage = { url: imgUrl, publicId: obj.coverImage?.publicId || '', alt: obj.coverImage?.alt || obj.title || '' };
+  obj.featuredImage = { url: imgUrl, publicId: obj.featuredImage?.publicId || '', alt: obj.featuredImage?.alt || obj.title || '' };
+  obj.mainImage = { url: imgUrl, publicId: obj.mainImage?.publicId || '', alt: obj.mainImage?.alt || obj.title || '' };
+
+  if (!obj.metaTitle) {
+    obj.metaTitle = obj.seo?.title || obj.title || '';
+  }
+  if (!obj.metaDesc) {
+    obj.metaDesc = obj.seo?.description || obj.excerpt || '';
+  }
+  return obj;
+}
+
+// Get All Blogs (With search, filtering, and pagination)
+async function getBlogs(req, res) {
+  try {
+    const { search, category, status } = req.query;
+    const filter = {};
+
+    if (status && status !== 'all') {
+      if (status === 'publish') {
+        filter.$or = [{ status: 'publish' }, { status: 'published' }];
+      } else {
+        filter.status = status;
+      }
+    }
+
+    if (category && category !== 'all') {
+      filter.category = new RegExp(`^${category}$`, 'i');
+    }
+
+    if (search) {
+      filter.$or = [
+        { title: new RegExp(search, 'i') },
+        { category: new RegExp(search, 'i') },
+        { tags: new RegExp(search, 'i') },
+        { metaTitle: new RegExp(search, 'i') }
+      ];
+    }
+
     const page = parseInt(req.query.page, 10);
     const limit = parseInt(req.query.limit, 10);
     const totalBlogs = await Blog.countDocuments(filter);
@@ -149,19 +194,7 @@ async function getBlogs(req, res) {
       query = query.skip((page - 1) * limit).limit(limit);
     }
     const rawBlogs = await query;
-    const blogs = rawBlogs.map((b) => {
-      const obj = b.toObject();
-      if (!obj.images) {
-        obj.images = obj.coverImage?.url || obj.featuredImage?.url || '';
-      }
-      if (!obj.metaTitle) {
-        obj.metaTitle = obj.seo?.title || obj.title || '';
-      }
-      if (!obj.metaDesc) {
-        obj.metaDesc = obj.seo?.description || obj.excerpt || '';
-      }
-      return obj;
-    });
+    const blogs = rawBlogs.map((b) => formatBlogResponse(b));
 
     const totalPages = limit ? Math.ceil(totalBlogs / limit) : 1;
 
@@ -182,19 +215,20 @@ async function getBlogs(req, res) {
   }
 }
 
-
 // Get Blog by ID
 async function getBlogById(req, res) {
   try {
-    const blog = await Blog.findById(req.params.id);
-    if (!blog) {
+    const rawBlog = await Blog.findById(req.params.id);
+    if (!rawBlog) {
       return res.status(404).json({
         success: false,
         message: 'Blog not found'
       });
     }
+    const blog = formatBlogResponse(rawBlog);
     return res.status(200).json({
       success: true,
+      blog,
       data: blog
     });
   } catch (err) {
@@ -209,9 +243,9 @@ async function getBlogById(req, res) {
 async function getBlogBySlug(req, res) {
   try {
     const slug = slugify(req.params.slug);
-    const blog = await Blog.findOne({ slug });
+    const rawBlog = await Blog.findOne({ slug });
 
-    if (!blog) {
+    if (!rawBlog) {
       return res.status(404).json({
         success: false,
         message: 'Blog post not found'
@@ -219,8 +253,8 @@ async function getBlogBySlug(req, res) {
     }
 
     // Only allow public access if published or scheduled and date has passed
-    const isPublic = blog.status === 'published' || 
-      (blog.status === 'scheduled' && blog.scheduledAt && new Date(blog.scheduledAt) <= new Date());
+    const isPublic = rawBlog.status === 'published' || rawBlog.status === 'publish' ||
+      (rawBlog.status === 'scheduled' && rawBlog.scheduledAt && new Date(rawBlog.scheduledAt) <= new Date());
 
     if (!isPublic) {
       return res.status(403).json({
@@ -229,8 +263,11 @@ async function getBlogBySlug(req, res) {
       });
     }
 
+    const blog = formatBlogResponse(rawBlog);
+
     return res.status(200).json({
       success: true,
+      blog,
       data: blog
     });
   } catch (err) {
@@ -240,6 +277,7 @@ async function getBlogBySlug(req, res) {
     });
   }
 }
+
 
 // Update Blog
 async function updateBlog(req, res) {
