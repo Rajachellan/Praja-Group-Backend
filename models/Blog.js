@@ -36,9 +36,31 @@ const blogSchema = new mongoose.Schema({
     alt: { type: String, default: '' }
   },
   content: {
-    type: Object,
+    type: mongoose.Schema.Types.Mixed,
     required: [true, 'Blog content is required']
   },
+  images: {
+    type: String,
+    default: ''
+  },
+  metaTitle: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  metaDesc: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  keywords: [{
+    type: String,
+    trim: true
+  }],
+  focusKeyword: [{
+    type: String,
+    trim: true
+  }],
   category: {
     type: String,
     default: 'General',
@@ -70,13 +92,14 @@ const blogSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['draft', 'published', 'scheduled'],
+    enum: ['draft', 'published', 'publish', 'private', 'scheduled'],
     default: 'draft',
     index: true
   },
   publishedAt: { type: Date },
   scheduledAt: { type: Date }
 }, {
+
   timestamps: true
 });
 

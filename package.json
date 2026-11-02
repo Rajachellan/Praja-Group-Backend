@@ -1,14 +1,14 @@
 {
-  "name": "server",
+  "name": "Prajha-Groups-Backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
     "dev": "nodemon app.js",
     "start": "node app.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "Sainareshkumar S",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

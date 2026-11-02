@@ -1,10 +1,27 @@
 const Blog = require('../models/Blog');
 const slugify = require('../utils/slugify');
+const { processFileUpload } = require('../services/uploadService');
 
 // Create Blog
 async function createBlog(req, res) {
   try {
-    const { title, slug, excerpt, featuredImage, coverImage, mainImage, content, category, tags, author, faqs, seo, status, scheduledAt } = req.body;
+    const {
+      title,
+      slug,
+      excerpt,
+      featuredImage,
+      coverImage,
+      mainImage,
+      content,
+      category,
+      author,
+      faqs,
+      seo,
+      status,
+      scheduledAt,
+      metaTitle,
+      metaDesc
+    } = req.body;
 
     if (!title || !content) {
       return res.status(400).json({
@@ -25,24 +42,56 @@ async function createBlog(req, res) {
     }
 
     const blogStatus = status || 'draft';
-    const publishedAt = blogStatus === 'published' ? new Date() : null;
+    const publishedAt = (blogStatus === 'published' || blogStatus === 'publish') ? new Date() : null;
 
-    const cover = coverImage || featuredImage || { url: '' };
-    const main = mainImage || featuredImage || { url: '' };
+    // Normalizing arrays from FormData
+    const rawTags = req.body.tags || req.body['tags[]'] || [];
+    const tags = Array.isArray(rawTags) ? rawTags : [rawTags].filter(Boolean);
+
+    const rawKeywords = req.body.keywords || req.body['keywords[]'] || [];
+    const keywords = Array.isArray(rawKeywords) ? rawKeywords : [rawKeywords].filter(Boolean);
+
+    const rawFocusKeyword = req.body.focusKeyword || req.body['focusKeyword[]'] || [];
+    const focusKeyword = Array.isArray(rawFocusKeyword) ? rawFocusKeyword : [rawFocusKeyword].filter(Boolean);
+
+    let imageUrl = req.body.images || '';
+    if (req.file) {
+      try {
+        const uploadResult = await processFileUpload(req.file, req, 'images');
+        imageUrl = uploadResult.url || '';
+      } catch (uploadErr) {
+        console.error('File upload error in createBlog:', uploadErr);
+      }
+    }
+
+    const cover = imageUrl ? { url: imageUrl } : (coverImage || featuredImage || { url: '' });
+    const main = imageUrl ? { url: imageUrl } : (mainImage || featuredImage || { url: '' });
+    const finalMetaTitle = metaTitle || (seo && seo.title) || title;
+    const finalMetaDesc = metaDesc || (seo && seo.description) || excerpt || '';
 
     const newBlog = new Blog({
       title,
       slug: finalSlug,
-      excerpt: excerpt || '',
+      excerpt: excerpt || finalMetaDesc,
       featuredImage: cover,
       coverImage: cover,
       mainImage: main,
+      images: imageUrl || cover.url || '',
+      metaTitle: finalMetaTitle,
+      metaDesc: finalMetaDesc,
+      keywords,
+      focusKeyword,
       content,
       category: category || 'General',
-      tags: tags || [],
+      tags,
       author: author || { name: 'Prajha Executive Team' },
       faqs: faqs || [],
-      seo: seo || {},
+      seo: {
+        title: finalMetaTitle,
+        description: finalMetaDesc,
+        keywords: [...new Set([...keywords, ...focusKeyword, ...tags])],
+        ...(seo || {})
+      },
       status: blogStatus,
       publishedAt,
       scheduledAt: blogStatus === 'scheduled' ? scheduledAt : null
@@ -53,6 +102,7 @@ async function createBlog(req, res) {
     return res.status(201).json({
       success: true,
       message: 'Blog created successfully',
+      blog: newBlog,
       data: newBlog
     });
   } catch (err) {
@@ -63,14 +113,18 @@ async function createBlog(req, res) {
   }
 }
 
-// Get All Blogs (With search and filtering)
+// Get All Blogs (With search, filtering, and pagination)
 async function getBlogs(req, res) {
   try {
     const { search, category, status } = req.query;
     const filter = {};
 
     if (status && status !== 'all') {
-      filter.status = status;
+      if (status === 'publish') {
+        filter.$or = [{ status: 'publish' }, { status: 'published' }];
+      } else {
+        filter.status = status;
+      }
     }
 
     if (category && category !== 'all') {
@@ -81,15 +135,43 @@ async function getBlogs(req, res) {
       filter.$or = [
         { title: new RegExp(search, 'i') },
         { category: new RegExp(search, 'i') },
-        { tags: new RegExp(search, 'i') }
+        { tags: new RegExp(search, 'i') },
+        { metaTitle: new RegExp(search, 'i') }
       ];
     }
 
-    const blogs = await Blog.find(filter).sort({ createdAt: -1 });
+    const page = parseInt(req.query.page, 10);
+    const limit = parseInt(req.query.limit, 10);
+    const totalBlogs = await Blog.countDocuments(filter);
+
+    let query = Blog.find(filter).sort({ createdAt: -1 });
+    if (page && limit) {
+      query = query.skip((page - 1) * limit).limit(limit);
+    }
+    const rawBlogs = await query;
+    const blogs = rawBlogs.map((b) => {
+      const obj = b.toObject();
+      if (!obj.images) {
+        obj.images = obj.coverImage?.url || obj.featuredImage?.url || '';
+      }
+      if (!obj.metaTitle) {
+        obj.metaTitle = obj.seo?.title || obj.title || '';
+      }
+      if (!obj.metaDesc) {
+        obj.metaDesc = obj.seo?.description || obj.excerpt || '';
+      }
+      return obj;
+    });
+
+    const totalPages = limit ? Math.ceil(totalBlogs / limit) : 1;
 
     return res.status(200).json({
       success: true,
-      count: blogs.length,
+      count: totalBlogs,
+      totalBlogs,
+      totalPages,
+      currentPage: page || 1,
+      blogs,
       data: blogs
     });
   } catch (err) {
@@ -99,6 +181,7 @@ async function getBlogs(req, res) {
     });
   }
 }
+
 
 // Get Blog by ID
 async function getBlogById(req, res) {
@@ -162,7 +245,23 @@ async function getBlogBySlug(req, res) {
 async function updateBlog(req, res) {
   try {
     const { id } = req.params;
-    const { title, slug, excerpt, featuredImage, coverImage, mainImage, content, category, tags, author, faqs, seo, status, scheduledAt } = req.body;
+    const {
+      title,
+      slug,
+      excerpt,
+      featuredImage,
+      coverImage,
+      mainImage,
+      content,
+      category,
+      author,
+      faqs,
+      seo,
+      status,
+      scheduledAt,
+      metaTitle,
+      metaDesc
+    } = req.body;
 
     const blog = await Blog.findById(id);
     if (!blog) {
@@ -188,27 +287,72 @@ async function updateBlog(req, res) {
       }
     }
 
+    let imageUrl = req.body.images || '';
+    if (req.file) {
+      try {
+        const uploadResult = await processFileUpload(req.file, req, 'images');
+        imageUrl = uploadResult.url || '';
+      } catch (uploadErr) {
+        console.error('File upload error in updateBlog:', uploadErr);
+      }
+    }
+
     if (title) blog.title = title;
     blog.slug = finalSlug;
-    blog.excerpt = excerpt || blog.excerpt || '';
-    if (coverImage) {
+    if (content) blog.content = content;
+    if (category) blog.category = category;
+
+    if (imageUrl) {
+      blog.images = imageUrl;
+      blog.coverImage = { url: imageUrl };
+      blog.featuredImage = { url: imageUrl };
+    } else if (coverImage) {
       blog.coverImage = coverImage;
       blog.featuredImage = coverImage;
+      if (coverImage.url) blog.images = coverImage.url;
     } else if (featuredImage) {
       blog.featuredImage = featuredImage;
       blog.coverImage = featuredImage;
+      if (featuredImage.url) blog.images = featuredImage.url;
     }
+
     if (mainImage) blog.mainImage = mainImage;
-    if (content) blog.content = content;
-    if (category) blog.category = category;
-    if (tags) blog.tags = tags;
+
+    const rawTags = req.body.tags || req.body['tags[]'];
+    if (rawTags !== undefined) {
+      blog.tags = Array.isArray(rawTags) ? rawTags : [rawTags].filter(Boolean);
+    }
+
+    const rawKeywords = req.body.keywords || req.body['keywords[]'];
+    if (rawKeywords !== undefined) {
+      blog.keywords = Array.isArray(rawKeywords) ? rawKeywords : [rawKeywords].filter(Boolean);
+    }
+
+    const rawFocusKeyword = req.body.focusKeyword || req.body['focusKeyword[]'];
+    if (rawFocusKeyword !== undefined) {
+      blog.focusKeyword = Array.isArray(rawFocusKeyword) ? rawFocusKeyword : [rawFocusKeyword].filter(Boolean);
+    }
+
+    if (metaTitle !== undefined) blog.metaTitle = metaTitle;
+    if (metaDesc !== undefined) blog.metaDesc = metaDesc;
+    if (excerpt !== undefined) blog.excerpt = excerpt || blog.metaDesc || '';
+
     if (author) blog.author = author;
     if (faqs) blog.faqs = faqs;
-    if (seo) blog.seo = seo;
+    if (seo) {
+      blog.seo = seo;
+    } else if (blog.metaTitle || blog.metaDesc) {
+      blog.seo = {
+        title: blog.metaTitle || blog.title,
+        description: blog.metaDesc || blog.excerpt,
+        keywords: blog.keywords || blog.tags || [],
+        ...(blog.seo || {})
+      };
+    }
 
     if (status) {
       blog.status = status;
-      if (status === 'published' && !blog.publishedAt) {
+      if ((status === 'published' || status === 'publish') && !blog.publishedAt) {
         blog.publishedAt = new Date();
       }
       if (status === 'scheduled') {
@@ -221,6 +365,7 @@ async function updateBlog(req, res) {
     return res.status(200).json({
       success: true,
       message: 'Blog updated successfully',
+      blog,
       data: blog
     });
   } catch (err) {
