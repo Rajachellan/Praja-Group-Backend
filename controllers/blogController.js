@@ -2,6 +2,42 @@ const Blog = require('../models/Blog');
 const slugify = require('../utils/slugify');
 const { processFileUpload } = require('../services/uploadService');
 
+function normalizeBlogStatus(status) {
+  if (!status) return 'draft';
+  const normalized = String(status).trim().toLowerCase();
+  if (normalized === 'publish') return 'published';
+  return normalized;
+}
+
+function normalizeBlogContent(rawContent) {
+  if (!rawContent) return rawContent;
+  if (typeof rawContent === 'object') return rawContent;
+  if (typeof rawContent === 'string') {
+    const trimmed = rawContent.trim();
+    const match = trimmed.match(/^(?:<p[^>]*>\s*)?(\{\s*(?:&quot;|")type(?:&quot;|")\s*:\s*(?:&quot;|")doc(?:&quot;|")[\s\S]*\})(?:\s*<\/p>)?$/i);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        if (parsed && parsed.type === 'doc') return parsed;
+      } catch {
+        try {
+          const decoded = match[1]
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;|&apos;/g, "'")
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&');
+          const parsed = JSON.parse(decoded);
+          if (parsed && parsed.type === 'doc') return parsed;
+        } catch {
+          // Keep original HTML/text string if not valid Tiptap JSON
+        }
+      }
+    }
+  }
+  return rawContent;
+}
+
 // Create Blog
 async function createBlog(req, res) {
   try {
@@ -41,8 +77,9 @@ async function createBlog(req, res) {
       });
     }
 
-    const blogStatus = status || 'draft';
-    const publishedAt = (blogStatus === 'published' || blogStatus === 'publish') ? new Date() : null;
+    const blogStatus = normalizeBlogStatus(status);
+    const publishedAt = blogStatus === 'published' ? new Date() : null;
+    const normalizedContent = normalizeBlogContent(content);
 
     // Normalizing arrays from FormData
     const rawTags = req.body.tags || req.body['tags[]'] || [];
@@ -81,7 +118,7 @@ async function createBlog(req, res) {
       metaDesc: finalMetaDesc,
       keywords,
       focusKeyword,
-      content,
+      content: normalizedContent,
       category: category || 'General',
       tags,
       author: author || { name: 'Prajha Executive Team' },
@@ -123,42 +160,59 @@ function formatBlogResponse(b) {
   obj.featuredImage = { url: imgUrl, publicId: obj.featuredImage?.publicId || '', alt: obj.featuredImage?.alt || obj.title || '' };
   obj.mainImage = { url: imgUrl, publicId: obj.mainImage?.publicId || '', alt: obj.mainImage?.alt || obj.title || '' };
 
+  if (obj.status === 'publish') {
+    obj.status = 'published';
+  }
+  obj.content = normalizeBlogContent(obj.content);
+
   if (!obj.metaTitle) {
     obj.metaTitle = obj.seo?.title || obj.title || '';
   }
   if (!obj.metaDesc) {
     obj.metaDesc = obj.seo?.description || obj.excerpt || '';
   }
+  if (!obj.excerpt && obj.metaDesc) {
+    obj.excerpt = obj.metaDesc;
+  }
   return obj;
 }
 
 // Get All Blogs (With search, filtering, and pagination)
 async function getBlogs(req, res) {
-
   try {
     const { search, category, status } = req.query;
-    const filter = {};
+    const andConditions = [];
 
     if (status && status !== 'all') {
-      if (status === 'publish') {
-        filter.$or = [{ status: 'publish' }, { status: 'published' }];
+      const normalizedStatus = String(status).trim().toLowerCase();
+      if (normalizedStatus === 'publish' || normalizedStatus === 'published') {
+        andConditions.push({
+          $or: [
+            { status: { $in: ['publish', 'published'] } },
+            { status: 'scheduled', scheduledAt: { $lte: new Date() } }
+          ]
+        });
       } else {
-        filter.status = status;
+        andConditions.push({ status: normalizedStatus });
       }
     }
 
     if (category && category !== 'all') {
-      filter.category = new RegExp(`^${category}$`, 'i');
+      andConditions.push({ category: new RegExp(`^${category}$`, 'i') });
     }
 
     if (search) {
-      filter.$or = [
-        { title: new RegExp(search, 'i') },
-        { category: new RegExp(search, 'i') },
-        { tags: new RegExp(search, 'i') },
-        { metaTitle: new RegExp(search, 'i') }
-      ];
+      andConditions.push({
+        $or: [
+          { title: new RegExp(search, 'i') },
+          { category: new RegExp(search, 'i') },
+          { tags: new RegExp(search, 'i') },
+          { metaTitle: new RegExp(search, 'i') }
+        ]
+      });
     }
+
+    const filter = andConditions.length > 0 ? { $and: andConditions } : {};
 
     const page = parseInt(req.query.page, 10);
     const limit = parseInt(req.query.limit, 10);
@@ -312,7 +366,7 @@ async function updateBlog(req, res) {
 
     if (title) blog.title = title;
     blog.slug = finalSlug;
-    if (content) blog.content = content;
+    if (content) blog.content = normalizeBlogContent(content);
     if (category) blog.category = category;
 
     if (imageUrl) {
@@ -364,11 +418,12 @@ async function updateBlog(req, res) {
     }
 
     if (status) {
-      blog.status = status;
-      if ((status === 'published' || status === 'publish') && !blog.publishedAt) {
+      const normalizedStatus = normalizeBlogStatus(status);
+      blog.status = normalizedStatus;
+      if (normalizedStatus === 'published' && !blog.publishedAt) {
         blog.publishedAt = new Date();
       }
-      if (status === 'scheduled') {
+      if (normalizedStatus === 'scheduled') {
         blog.scheduledAt = scheduledAt || blog.scheduledAt;
       }
     }
